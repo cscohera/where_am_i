@@ -3,6 +3,8 @@
 
 const KM_TO_MI = 0.621371;
 const DEFAULT_VIEW = { center: [39.8283, -98.5795], zoom: 4 }; // continental US
+// Free public OSRM server with a walking/running profile (no key, fair use).
+const ROUTER = "https://routing.openstreetmap.de/routed-foot/route/v1/foot/";
 
 // ---------- Google encoded polyline (precision 5) ----------
 function encodePolyline(points) {
@@ -61,6 +63,17 @@ function totalMeters(map, points) {
 function formatDistance(meters, unit) {
   const km = meters / 1000;
   return (unit === "mi" ? km * KM_TO_MI : km).toFixed(2);
+}
+
+// Path along roads/paths from a to b, as [[lat, lng], ...].
+async function routeBetween(a, b) {
+  const url = `${ROUTER}${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=polyline`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Router HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.code !== "Ok" || !data.routes || !data.routes.length) throw new Error(data.code || "No route");
+  // Keep the tapped points as the ends so consecutive legs join exactly.
+  return [a, ...decodePolyline(data.routes[0].geometry), b];
 }
 
 function dotMarker(latlng, color) {
@@ -122,9 +135,39 @@ function startViewMode(params) {
 function startEditMode() {
   $("edit-ui").hidden = false;
 
-  const points = [];
-  let unit = "mi";
-  try { unit = localStorage.getItem("unit") === "km" ? "km" : "mi"; } catch {}
+  // waypoints: the points you tapped. legs[i] is the path from waypoints[i] to waypoints[i + 1].
+  // Kept in one object so handlers.js can read and change it.
+  const state = { waypoints: [], legs: [], unit: "mi", followRoads: true };
+  const { waypoints, legs } = state;
+  try { state.unit = localStorage.getItem("unit") === "km" ? "km" : "mi"; } catch {}
+  try { state.followRoads = localStorage.getItem("followRoads") !== "0"; } catch {}
+  $("follow").checked = state.followRoads;
+
+  function fullPath() {
+    if (legs.length === 0) return waypoints.slice();
+    const path = legs[0].points.slice();
+    for (let i = 1; i < legs.length; i++) path.push(...legs[i].points.slice(1));
+    return path;
+  }
+
+  function addPoint(latlng) {
+    const prev = waypoints[waypoints.length - 1];
+    waypoints.push(latlng);
+    if (prev) {
+      const leg = { points: [prev, latlng], pending: state.followRoads, failed: false };
+      legs.push(leg);
+      if (state.followRoads) {
+        routeBetween(prev, latlng)
+          .then((path) => { leg.points = path; })
+          .catch(() => { leg.failed = true; })
+          .finally(() => {
+            leg.pending = false;
+            if (legs.includes(leg)) update(); // ignore results for legs that were undone
+          });
+      }
+    }
+    update();
+  }
 
   // Center on the user's location if they allow it.
   if (navigator.geolocation) {
@@ -136,71 +179,34 @@ function startEditMode() {
   }
 
   function update() {
-    drawRoute(points);
-    $("distance").textContent = formatDistance(totalMeters(map, points), unit);
-    $("unit").textContent = unit;
-    $("undo").disabled = points.length === 0;
-    $("clear").disabled = points.length === 0;
-    $("loop").disabled = points.length < 2;
-    $("share").disabled = points.length < 2;
-    $("hint").textContent = points.length === 0 ? "Tap the map to add points"
-      : points.length === 1 ? "Tap again to draw the route" : `${points.length} points`;
+    const path = fullPath();
+    const pending = legs.some((l) => l.pending);
+    drawRoute(path);
+    $("distance").textContent = formatDistance(totalMeters(map, path), state.unit);
+    $("unit").textContent = state.unit;
+    $("undo").disabled = waypoints.length === 0;
+    $("clear").disabled = waypoints.length === 0;
+    $("loop").disabled = waypoints.length < 2;
+    $("share").disabled = waypoints.length < 2 || pending;
+    $("hint").textContent = waypoints.length === 0 ? "Tap the map to add points"
+      : waypoints.length === 1 ? "Tap again to draw the route"
+      : pending ? "Finding route…"
+      : legs.some((l) => l.failed) ? "Couldn't find a path for part of it (straight line used)"
+      : `${waypoints.length} points`;
     $("share-out").hidden = true;
   }
 
-  map.on("click", (e) => {
-    points.push([e.latlng.lat, e.latlng.lng]);
-    update();
-  });
-
-  $("undo").onclick = () => { points.pop(); update(); };
-  $("clear").onclick = () => { points.length = 0; update(); };
-  $("loop").onclick = () => { points.push(points[0]); update(); };
-  $("unit").onclick = () => {
-    unit = unit === "km" ? "mi" : "km";
-    try { localStorage.setItem("unit", unit); } catch {}
-    update();
-  };
-  $("note").oninput = () => { $("share-out").hidden = true; };
-
   function buildLink() {
     const p = new URLSearchParams();
-    p.set("r", encodePolyline(points));
+    p.set("r", encodePolyline(fullPath()));
     const note = $("note").value.trim();
     if (note) p.set("n", note);
-    p.set("u", unit);
+    p.set("u", state.unit);
     return `${location.origin}${location.pathname}#${p.toString()}`;
   }
 
-  $("share").onclick = async () => {
-    const link = buildLink();
-    const dist = `${formatDistance(totalMeters(map, points), unit)} ${unit}`;
-    const message = `Here's where I'm running today (${dist}): ${link}`;
-
-    $("share-link").value = link;
-    $("sms").href = `sms:?&body=${encodeURIComponent(message)}`;
-    $("email").href = `mailto:?subject=${encodeURIComponent("My run today")}&body=${encodeURIComponent(message)}`;
-    $("share-status").textContent = "";
-    $("share-out").hidden = false;
-
-    // Native share sheet on phones (Messages, Mail, WhatsApp, ...).
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "My run today", text: `Here's where I'm running today (${dist})`, url: link });
-      } catch { /* user cancelled — fallbacks are visible */ }
-    }
-  };
-
-  $("copy").onclick = async () => {
-    const link = $("share-link").value;
-    try {
-      await navigator.clipboard.writeText(link);
-      $("share-status").textContent = "Link copied!";
-    } catch {
-      $("share-link").select();
-      $("share-status").textContent = "Press Ctrl/Cmd+C to copy.";
-    }
-  };
+  // All the click/input handlers live in handlers.js.
+  attachEditHandlers({ state, addPoint, update, fullPath, buildLink });
 
   update();
 }

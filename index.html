@@ -17,6 +17,7 @@
         <div class="distance"><span id="distance">0.00</span> <button id="unit" class="unit" title="Toggle units">km</button></div>
         <div class="hint" id="hint">Tap the map to add points</div>
       </div>
+      <label class="toggle"><input id="follow" type="checkbox" checked> Follow roads &amp; paths</label>
       <input id="note" type="text" maxlength="200" placeholder="Note (e.g. Leaving 6:30am, back by 7:30)">
       <div class="row buttons">
         <button id="undo">Undo</button>
@@ -46,6 +47,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="handlers.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
