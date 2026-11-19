@@ -21,15 +21,6 @@ Open http://localhost:8000.
 
 Opening a shared link shows the route, the distance and the note.
 
-## Sharing with other people
-
-While it runs on `localhost`, a link only works on your own machine. To share for real, host the folder as a static site. For example, on GitHub Pages:
-
-1. `git init && git add . && git commit -m "Initial commit"`
-2. Push to a new GitHub repo.
-3. In the repo, go to Settings → Pages → Deploy from branch → `main` / root.
-4. Use the site at `https://<username>.github.io/<repo>/`.
-
 ## Files
 
 - `index.html`: the page
