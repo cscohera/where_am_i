@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Where Am I Running</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="panel">
+    <!-- Edit mode -->
+    <div id="edit-ui" hidden>
+      <div class="row">
+        <div class="distance"><span id="distance">0.00</span> <button id="unit" class="unit" title="Toggle units">km</button></div>
+        <div class="hint" id="hint">Tap the map to add points</div>
+      </div>
+      <input id="note" type="text" maxlength="200" placeholder="Note (e.g. Leaving 6:30am, back by 7:30)">
+      <div class="row buttons">
+        <button id="undo">Undo</button>
+        <button id="loop">Loop to start</button>
+        <button id="clear">Clear</button>
+        <button id="share" class="primary">Share</button>
+      </div>
+      <div id="share-out" hidden>
+        <input id="share-link" type="text" readonly>
+        <div class="row buttons">
+          <button id="copy">Copy</button>
+          <a id="sms" class="btn" href="#">Text</a>
+          <a id="email" class="btn" href="#">Email</a>
+        </div>
+        <div class="hint" id="share-status"></div>
+      </div>
+    </div>
+
+    <!-- View mode -->
+    <div id="view-ui" hidden>
+      <div class="row">
+        <div class="distance"><span id="v-distance">0.00</span> <span id="v-unit">km</span></div>
+        <a href="./" id="plan-own" class="hint">Plan my own route</a>
+      </div>
+      <div id="v-note" class="note-view"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
